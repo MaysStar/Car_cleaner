@@ -1,0 +1,16 @@
+# vs temporary files
+**/build/
+**/.pio/
+.vscode/
+
+# Configuration
+**/sdkconfig
+**/sdkconfig.old
+**/sdkconfig.*
+
+# Secret certificates and passwords
+**/certs.c
+
+# System files
+*.log
+.DS_Store
