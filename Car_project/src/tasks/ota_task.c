@@ -2,20 +2,23 @@
 
 static const char* TAG = "ota_task";
 
-extern const char* server_cert_pem_start;
+extern const char* server_cert_home_pem_start;
+extern const char* server_cert_lviv_pem_start;
 
 /* Main task for ota */
 void ota_task(void* pvParameters)
 {
+    static uint32_t update_size = 0;
+    static uint32_t ota_percent = 0;
     while(1)
     {
         xEventGroupWaitBits(e_tasks, MQTT_GOT_UPDATE, pdTRUE, pdTRUE, portMAX_DELAY);
 
         esp_http_client_config_t esp_http_client_config = 
         {
-            .url = CONFIG_OTA_HTTPS_URL,
-            .cert_pem = server_cert_pem_start,
-            .timeout_ms = 10000, 
+            .url = CONFIG_OTA_HTTPS_URL_HOME,
+            .cert_pem = server_cert_lviv_pem_start,
+            .timeout_ms = 10000,
             .keep_alive_enable = true,
         };
         
@@ -33,11 +36,20 @@ void ota_task(void* pvParameters)
             goto cleanup;
         }
 
+        xEventGroupSetBits(e_tasks, OTA_BIT_IN_PROGRESS);
+
+        /* get size of all update */
+        update_size = esp_https_ota_get_image_size(ota_handle);
+
         // perform OTA
         while(esp_https_ota_perform(ota_handle) == ESP_ERR_HTTPS_OTA_IN_PROGRESS)
         {
+            ota_percent = (esp_https_ota_get_image_len_read(ota_handle) * 100) / update_size;
+            xQueueSend(q_ota_level, &ota_percent, pdMS_TO_TICKS(10));
             vTaskDelay(1);
         }
+
+        xEventGroupClearBits(e_tasks, OTA_BIT_IN_PROGRESS);
 
         // Finish update
         if (esp_https_ota_finish(ota_handle) == ESP_OK) {

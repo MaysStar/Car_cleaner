@@ -1,45 +1,13 @@
-#include "mqtts_hiveMQ_task.h"
+#include "mqtts_hiveMQ.h"
 
-static const char* TAG = "mqtts_haveMQ_task";
+static const char* TAG = "mqtts_haveMQ";
+
 static char rx_mqtts_buf[256];
-static char topic[128];
+static char topic_buf[128];
+static int32_t servo_angle;
 
-/* time sync for mqtts connection */
-void time_sync(void)
-{
-    ESP_LOGI(TAG, "Initializing SNTP");
-
-    // get time from server periodically
-    esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
-
-    // set server
-    esp_sntp_config_t config = ESP_NETIF_SNTP_DEFAULT_CONFIG("pool.ntp.org");
-    esp_netif_sntp_init(&config);
-
-    // try sync time
-    if (esp_netif_sntp_sync_wait(pdMS_TO_TICKS(20000)) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to update system time within 20s timeout");
-    }
-
-    // wait for time stability
-    vTaskDelay(pdMS_TO_TICKS(2000));
-
-    // time struct 
-    time_t now;
-    struct tm timeinfo;
-
-    // get current time and format for common 
-    time(&now);
-    localtime_r(&now, &timeinfo);
-
-    // print current time 
-    ESP_LOGI(TAG, "Current time: %d-%d-%d %d:%d:%d", 
-             timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
-             timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
-}
-
-/* Main mqtts task with connected to hiveMQ */
-void mqtts_hiveMQ_task(void* pvParameters)
+/* Main mqtts function which connect to hiveMQ */
+void mqtts_hiveMQ(void)
 {
     xEventGroupWaitBits(e_tasks, WIFI_BIT_GOT_IP, pdFALSE, pdTRUE, portMAX_DELAY);
 
@@ -56,8 +24,6 @@ void mqtts_hiveMQ_task(void* pvParameters)
     esp_mqtt_client_config.broker.verification.certificate = hivemq_root_ca;
     esp_mqtt_client_config.broker.verification.certificate_len = strlen(hivemq_root_ca) + 1;
 
-    time_sync();
-
     esp_mqtt_client_handle_t esp_mqtt_client_handle = esp_mqtt_client_init(&esp_mqtt_client_config);
 
     if(esp_mqtt_client_handle != NULL)
@@ -65,11 +31,6 @@ void mqtts_hiveMQ_task(void* pvParameters)
         ESP_ERROR_CHECK(esp_mqtt_client_register_event(esp_mqtt_client_handle, MQTT_EVENT_ANY, mqtts_hiveMQ_handler, NULL));
 
         ESP_ERROR_CHECK(esp_mqtt_client_start(esp_mqtt_client_handle));
-    }
-
-    while(1)
-    {
-        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
@@ -85,28 +46,59 @@ void mqtts_hiveMQ_handler(  void* event_handler_arg,
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(TAG, "Connected to HiveMQ! Subscribing...");
             esp_mqtt_client_subscribe(esp_mqtt_event->client, "car/ota", 1);
+            esp_mqtt_client_subscribe(esp_mqtt_event->client, "car/motors", 1);
+            esp_mqtt_client_subscribe(esp_mqtt_event->client, "car/servo", 1);
             break;
         case MQTT_EVENT_DATA:
             ESP_LOGI(TAG, "MQTT DATA");
 
-            snprintf(topic, sizeof(topic), "%.*s", esp_mqtt_event->topic_len, esp_mqtt_event->topic);
+            snprintf(topic_buf, sizeof(topic_buf), "%.*s", esp_mqtt_event->topic_len, esp_mqtt_event->topic);
             snprintf(rx_mqtts_buf, sizeof(rx_mqtts_buf), "%.*s", esp_mqtt_event->data_len, esp_mqtt_event->data);
 
-            if(strcmp(topic, "car/ota") == 0)
+            if(strcmp(topic_buf, "car/ota") == 0)
             {
+                ESP_LOGI(TAG, "car/ota");
                 if(strcmp(rx_mqtts_buf, "true") == 0) xEventGroupSetBits(e_tasks, MQTT_GOT_UPDATE);
             }
             
-            else if(strcmp(topic, "car/motors") == 0)
+            else if(strcmp(topic_buf, "car/motors") == 0)
             {
+                ESP_LOGI(TAG, "car/motors");
                 if(strcmp(rx_mqtts_buf, "stop") == 0) xEventGroupSetBits(e_tasks, MQTT_GOT_MOTOR_STOP);
 
                 else if(strcmp(rx_mqtts_buf, "in1") == 0) xEventGroupSetBits(e_tasks, MQTT_GOT_MOTOR_IN1_GO);
 
                 else if(strcmp(rx_mqtts_buf, "in2") == 0) xEventGroupSetBits(e_tasks, MQTT_GOT_MOTOR_IN2_GO);
+
+                else if(strcmp(rx_mqtts_buf, "start") == 0) xEventGroupSetBits(e_tasks, MQTT_GOT_MOTOR_START);
+
+                else if(strcmp(rx_mqtts_buf, "back") == 0) xEventGroupSetBits(e_tasks, MQTT_GOT_MOTOR_START);
+
+                else if(strcmp(rx_mqtts_buf, "start1") == 0) xEventGroupSetBits(e_tasks, MQTT_GOT_MOTOR1_START);
+
+                else if(strcmp(rx_mqtts_buf, "start2") == 0) xEventGroupSetBits(e_tasks, MQTT_GOT_MOTOR2_START);
+
+                else if(strcmp(rx_mqtts_buf, "back1") == 0) xEventGroupSetBits(e_tasks, MQTT_GOT_MOTOR1_BACK);
+                
+                else if(strcmp(rx_mqtts_buf, "back2") == 0) xEventGroupSetBits(e_tasks, MQTT_GOT_MOTOR2_BACK);
+            }
+
+            else if(strcmp(topic_buf, "car/servo") == 0)
+            {   
+                ESP_LOGI(TAG, "car/servo");
+                servo_angle = atoi(rx_mqtts_buf);
+                if(servo_angle > 180) servo_angle = 180;
+                else if(servo_angle < 0) servo_angle = 0;
+                xQueueSend(q_servo_angle, &servo_angle, 0);
             }
             break;
+        case MQTT_EVENT_SUBSCRIBED:
+            ESP_LOGI(TAG, "MESSAGES SUBSCRIBED SUCCESSFULLY, msg_id=%d", esp_mqtt_event->msg_id);
+            xEventGroupSetBits(e_tasks, MQTT_SUBSCRIBE);
+            break;
+
         case MQTT_EVENT_ERROR:
+            xEventGroupClearBits(e_tasks, MQTT_SUBSCRIBE);
             ESP_LOGE(TAG, "MQTT Error occurred");
             break;
         default:

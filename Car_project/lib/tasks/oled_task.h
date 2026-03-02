@@ -8,6 +8,7 @@
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+
 #include "common.h"
 
 #define I2C_DEFAULT_PORT I2C_NUM_0
@@ -15,7 +16,7 @@
 #define I2C_SCL_PIN GPIO_NUM_8
 #define I2C_SDA_PIN GPIO_NUM_9
 
-#define I2C_SPEED 100000
+#define I2C_SPEED_OLED 100000
 
 #define I2C_SLAVE_ADDR 0x3C
 
@@ -56,7 +57,13 @@ typedef struct {
 
 extern QueueHandle_t q_distance;
 
+void set_version(const char* version);
 void oled_init(void);
+void write_distance(void);
+void write_cord_temp(void);
+void write_ota_update(void);
+void write_time(void);
+
 void write_data(void);
 void oled_task(void* pvParameters);
 

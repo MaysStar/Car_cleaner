@@ -16,6 +16,7 @@
 #include <time.h>
 #include <string.h>
 
+#include "config.h"
 #include "common.h"
 #include "certs.h"
 

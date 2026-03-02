@@ -14,6 +14,9 @@
 #define GPIO_MOTOR_IN1 GPIO_NUM_1
 #define GPIO_MOTOR_IN2 GPIO_NUM_2
 
+#define GPIO_MOTOR_IN3 GPIO_NUM_4
+#define GPIO_MOTOR_IN4 GPIO_NUM_5
+
 void gpio_motor_init(void);
 void motor_task(void* pvParameters);
 

@@ -1,5 +1,5 @@
-#ifndef WIFI_TASK_H
-#define WIFI_TASK_H
+#ifndef WIFI_H
+#define WIFI_H
 
 #include "esp_err.h"
 #include "esp_log.h"
@@ -13,12 +13,12 @@
 #include "esp_ota_ops.h"
 
 #include "common.h"
+#include "config.h"
 
 void wifi_init(void);
-void wifi_task(void *pvParameters);
 void wifi_handler(  void* event_handler_arg,
                     esp_event_base_t event_base,
                     int32_t event_id,
                     void* event_data);
 
-#endif // WIFI_TASK_H
+#endif // WIFI_H

@@ -34,12 +34,17 @@ void uart_task(void* pvParameters)
     while(1)
     {
         ESP_ERROR_CHECK(uart_flush(UART_DEFAULT_PORT));
+
+        xSemaphoreTake(m_UART1, portMAX_DELAY);
         uart_write_bytes(UART_DEFAULT_PORT, "U", 1);
+        xSemaphoreGive(m_UART1);
 
         vTaskDelay(pdMS_TO_TICKS(30));
 
         //  Read 2 bytes
+        xSemaphoreTake(m_UART1, portMAX_DELAY);
         int len = uart_read_bytes(UART_DEFAULT_PORT, rx_buf, 2, pdMS_TO_TICKS(100));
+        xSemaphoreGive(m_UART1);
 
         if(len == 2)
         {
@@ -47,8 +52,12 @@ void uart_task(void* pvParameters)
             distance_mm = (uint16_t)(rx_buf[0] << 8 | rx_buf[1]);
 
             float distance_cm = (float)(distance_mm) / 10.0f;
-            
-            //ESP_LOGI(TAG, "Distance: %f cm\n", distance_cm);
+
+            if(distance_cm <= 20.0f)
+            {
+                xEventGroupSetBits(e_tasks, DISTANCE_LESS_THEN_20CM);
+            }
+            else xEventGroupSetBits(e_tasks, DISTANCE_MORE_THEN_20CM);
 
             xQueueSend(q_distance, &distance_cm, portMAX_DELAY);
         }

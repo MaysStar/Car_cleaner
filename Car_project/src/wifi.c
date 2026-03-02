@@ -1,6 +1,6 @@
-#include "wifi_task.h"
+#include "wifi.h"
 
-static const char* TAG = "wifi_task";
+static const char* TAG = "wifi";
 
 /* Wi-fi initialize */
 void wifi_init(void)
@@ -29,8 +29,8 @@ void wifi_init(void)
 
     wifi_config_t wifi_config = 
     {
-        .sta.ssid = CONFIG_WIFI_SSID,
-        .sta.password = CONFIG_WIFI_PASSWORD,
+        .sta.ssid = CONFIG_WIFI_SSID_HOME,
+        .sta.password = CONFIG_WIFI_PASSWORD_HOME,
         .sta.threshold.authmode = WIFI_AUTH_WPA2_PSK,
     };
 
@@ -41,19 +41,6 @@ void wifi_init(void)
 
     ESP_ERROR_CHECK(esp_wifi_start());
 }
-
-void wifi_task(void *pvParameters)
-{
-    wifi_init();
-
-    vTaskDelay(pdMS_TO_TICKS(5000));
-
-    while(1)
-    {
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
-}
-
 
 void wifi_handler(  void* event_handler_arg,
                     esp_event_base_t event_base,
