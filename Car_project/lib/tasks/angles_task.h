@@ -29,6 +29,17 @@
 
 #define RAD_TO_DEG 57.29578f
 
+typedef struct 
+{
+    int16_t accel_x;
+    int16_t accel_y;
+    int16_t accel_z;
+    int16_t temp;
+    int16_t gyro_x;
+    int16_t gyro_y;
+    int16_t gyro_z;
+} MPU6050_data_t;
+
 void gyroscope_accelerometer_init(void);
 void gyroscope_accelerometer_task(void* pvParameters);
 

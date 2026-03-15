@@ -21,7 +21,7 @@ void servo_motor_init(void)
     mcpwm_timer_config_t mcpwm_timer_config = 
     {
         .group_id = 0,
-        .intr_priority = 2,
+        .intr_priority = 1,
         .clk_src = MCPWM_TIMER_CLK_SRC_DEFAULT,
         .resolution_hz = 1000000, // 1 MHz
         .count_mode = MCPWM_TIMER_COUNT_MODE_UP,
@@ -34,7 +34,7 @@ void servo_motor_init(void)
     mcpwm_operator_config_t mcpwm_operator_config = 
     {
         .group_id = 0,
-        .intr_priority = 2,
+        .intr_priority = 1,
         .flags.update_dead_time_on_tez = 1,
     };
 
@@ -44,7 +44,7 @@ void servo_motor_init(void)
 
     mcpwm_comparator_config_t mcpwm_comparator_config = 
     {
-        .intr_priority = 2,
+        .intr_priority = 1,
         .flags.update_cmp_on_tez = 1,
     };
 
@@ -76,7 +76,12 @@ void servo_motor_task(void* pvParameters)
 
     // set servo in center
     mcpwm_comparator_set_compare_value(servo_cmpr, 1500);
+#if SERVO_USE_MQTTS_COMMAND
     static int32_t angle = 0; 
+#endif
+    //static EventBits_t bits;
+    //static bool less_then_20_cm = false;
+
     while(1)
     {
 #if SERVO_USE_MQTTS_COMMAND
@@ -85,10 +90,7 @@ void servo_motor_task(void* pvParameters)
         vTaskDelay(pdMS_TO_TICKS(100));        
 #endif
 #if SERVO_USE_ORDINARY_MODE
-        set_angle(70);
-        vTaskDelay(pdMS_TO_TICKS(200));
-        set_angle(110);
-        vTaskDelay(pdMS_TO_TICKS(200)); 
+            vTaskDelay(pdMS_TO_TICKS(1000)); 
 #endif       
     }
 }

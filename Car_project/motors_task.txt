@@ -1,9 +1,6 @@
 #include "motor_control_task.h"
 
-//static const char* TAG = "motor_control_task";
-
-/* The main motors state */
-Motors_state_t Main_motors_state = MOTORS_FORWARD_BACKWARD;
+static const char* TAG = "motor_control_task";
 
 /* PWM handles */
 static mcpwm_timer_handle_t mcpwm_timer_handle;
@@ -62,10 +59,6 @@ void dc_motor_init(void)
     ESP_ERROR_CHECK(mcpwm_new_operator(&mcpwm_operator_config, &mcpwm_oper_handle_motor1));
     ESP_ERROR_CHECK(mcpwm_new_operator(&mcpwm_operator_config, &mcpwm_oper_handle_motor2));
 
-    /* Connect timer to the operators */
-    ESP_ERROR_CHECK(mcpwm_operator_connect_timer(mcpwm_oper_handle_motor1, mcpwm_timer_handle));
-    ESP_ERROR_CHECK(mcpwm_operator_connect_timer(mcpwm_oper_handle_motor2, mcpwm_timer_handle));
-
     /* Configure and create comparator */
     mcpwm_comparator_config_t mcpwm_comparator_config = 
     {
@@ -97,34 +90,38 @@ void dc_motor_init(void)
         .gen_gpio_num = GPIO_MOTOR_IN4,
     };
 
-    ESP_ERROR_CHECK(mcpwm_new_generator(mcpwm_oper_handle_motor1, &mcpwm_generator_config_IN1, &mcpwm_gen_handle_IN1));
-    ESP_ERROR_CHECK(mcpwm_new_generator(mcpwm_oper_handle_motor1, &mcpwm_generator_config_IN2, &mcpwm_gen_handle_IN2));
-    ESP_ERROR_CHECK(mcpwm_new_generator(mcpwm_oper_handle_motor2, &mcpwm_generator_config_IN3, &mcpwm_gen_handle_IN3));
-    ESP_ERROR_CHECK(mcpwm_new_generator(mcpwm_oper_handle_motor2, &mcpwm_generator_config_IN4, &mcpwm_gen_handle_IN4));
+    ESP_ERROR_CHECK(mcpwm_new_generator(mcpwm_oper_handle_motor1, &mcpwm_generator_config_IN1, &mcpwm_generator_config_IN1));
+    ESP_ERROR_CHECK(mcpwm_new_generator(mcpwm_oper_handle_motor1, &mcpwm_generator_config_IN1, &mcpwm_generator_config_IN2));
+    ESP_ERROR_CHECK(mcpwm_new_generator(mcpwm_oper_handle_motor2, &mcpwm_generator_config_IN2, &mcpwm_generator_config_IN3));
+    ESP_ERROR_CHECK(mcpwm_new_generator(mcpwm_oper_handle_motor2, &mcpwm_generator_config_IN2, &mcpwm_generator_config_IN4));
 
     /* Set Register Timer Event Callbacks */
 
-    /* Set PWM HIGH and LOW when full and empty */    
+    /* Set PWM HIGH and LOW when empty and full */    
     {
         ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(mcpwm_gen_handle_IN1, 
-            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_HIGH),
-            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_LOW),
-            MCPWM_GEN_TIMER_EVENT_ACTION_END()));
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_HIGH)));
+
+        ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(mcpwm_gen_handle_IN1, 
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_LOW)));
 
         ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(mcpwm_gen_handle_IN2, 
-            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_HIGH),
-            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_LOW),
-            MCPWM_GEN_TIMER_EVENT_ACTION_END()));
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_HIGH)));
+
+        ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(mcpwm_gen_handle_IN2, 
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_LOW)));
+        
+        ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(mcpwm_gen_handle_IN3, 
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_HIGH)));
 
         ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(mcpwm_gen_handle_IN3, 
-            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_HIGH),
-            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_LOW),
-            MCPWM_GEN_TIMER_EVENT_ACTION_END()));
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_LOW)));
 
         ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(mcpwm_gen_handle_IN4, 
-            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_HIGH),
-            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_LOW),
-            MCPWM_GEN_TIMER_EVENT_ACTION_END()));
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_HIGH)));
+
+        ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(mcpwm_gen_handle_IN4, 
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_LOW)));
     }
 
     /* Set PWM comparation configuration */
@@ -183,7 +180,6 @@ void motors_control(int32_t percent_in_255)
     }
     else
     {
-        /* All motors stop */
         ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN1, 0, true));
         ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN2, 0, true));
         ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN4, 0, true));
@@ -201,8 +197,8 @@ void pid_controler_init(PID_controler_t* PID_controler)
     PID_controler->min_result = -255.0f;
     PID_controler->max_result = 255.0f;
 
-    PID_controler->prev_error = 0.0f;
-    PID_controler->prev_measurement = 0.0f;
+    PID_controler->prevError = 0.0f;
+    PID_controler->precMeasurement = 0.0f;
 
     PID_controler->proportional = 0.0f;
     PID_controler->integrator = 0.0f;
@@ -210,59 +206,16 @@ void pid_controler_init(PID_controler_t* PID_controler)
 
     PID_controler->curr_time = esp_timer_get_time();
     PID_controler->prev_time = PID_controler->curr_time;
-    PID_controler->tau = 0.0f;
 
     PID_controler->out = 0.0f;
 }
 
 /* Fuction which control the speed of the motors speed depending on distance to the wall, using Proportional Integration Differentiation 
     u(t) = Kp * e(t) + Ki * iteg(e(t)dt) + Kd * de(t) / dt
-
-    return value from -255 to 255
 */
-int32_t pid_controler_update(PID_controler_t* PID_controler, float measurement, float setpoint)
+int32_t pid_controler_update(PID_controler_t* PID_controler, float distance_cm, float setpoint)
 {
-    /* Calculate error dt and tau */
-    float curr_error = measurement - setpoint;
-
-    PID_controler->curr_time = esp_timer_get_time();
-    int64_t dt_int = PID_controler->curr_time - PID_controler->prev_time;
-    float dt_f = dt_int / 1000000.0f;
-
-    PID_controler->tau = 10.0f * dt_f;
-
-    /* Proportional */
-    PID_controler->proportional = PID_controler->Kp * curr_error;
     
-    /* Integrator Trapezoidal Rule */
-    PID_controler->integrator = PID_controler->integrator + 0.5f * PID_controler->Ki * (PID_controler->prev_error + curr_error) * dt_f;
-
-    if(PID_controler->integrator > PID_controler->max_result) PID_controler->integrator = PID_controler->max_result;
-    if(PID_controler->integrator < PID_controler->min_result) PID_controler->integrator = PID_controler->min_result;
-
-    /* Band-Limited Derivative */
-    PID_controler->differentiator =  (2.0f * PID_controler->Kd * (measurement - PID_controler->prev_measurement)
-                                  +  (2.0f * PID_controler->tau - dt_f) * PID_controler->differentiator)
-                                  /  (2.0f * PID_controler->tau + dt_f);
-
-    /* Set prev measurement */
-    PID_controler->prev_error = curr_error;
-    PID_controler->prev_measurement = measurement;
-    PID_controler->prev_time = PID_controler->curr_time;
-
-    /* Calculate output */
-    PID_controler->out = PID_controler->proportional + PID_controler->integrator + PID_controler->differentiator;
-
-    if(PID_controler->out > PID_controler->max_result)
-    {
-        PID_controler->out = PID_controler->max_result;
-    }
-    else if(PID_controler->out < PID_controler->min_result)
-    {
-        PID_controler->out = PID_controler->min_result;
-    }
-
-    return (int32_t)PID_controler->out;
 }
 
 /* Main task for control motors */
@@ -276,20 +229,7 @@ void motor_task(void* pvParameters)
     {
         xQueueReceive(q_distance_pid, &distance_cm, 0);
 
-        switch(Main_motors_state)
-        {
-            case MOTORS_FORWARD_BACKWARD:
-                int32_t speed = pid_controler_update(&PID_controler, distance_cm, setpoint);
-                motors_control(speed);
-                //ESP_LOGI(TAG, "motors go with speed: %d", speed);
-            break;
-            case MOTORS_ROTATE:
-
-            break;
-
-            default:
-                break;
-        }
+        motors_control(pid_controler_update(&PID_controler, distance_cm, setpoint));
 
         vTaskDelay(1);
     }

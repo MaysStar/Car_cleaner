@@ -5,15 +5,6 @@ static const char* TAG = "wifi";
 /* Wi-fi initialize */
 void wifi_init(void)
 {
-    esp_err_t ret = nvs_flash_init();
-
-    if(ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
-    {
-        // if some problem with it we erase old flash and upload new
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ESP_ERROR_CHECK(nvs_flash_init());
-    }
-
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
     //esp_netif_t* esp_netif = 
@@ -29,8 +20,8 @@ void wifi_init(void)
 
     wifi_config_t wifi_config = 
     {
-        .sta.ssid = CONFIG_WIFI_SSID_HOME,
-        .sta.password = CONFIG_WIFI_PASSWORD_HOME,
+        .sta.ssid = CONFIG_WIFI_SSID_LVIV,
+        .sta.password = CONFIG_WIFI_PASSWORD_LVIV,
         .sta.threshold.authmode = WIFI_AUTH_WPA2_PSK,
     };
 

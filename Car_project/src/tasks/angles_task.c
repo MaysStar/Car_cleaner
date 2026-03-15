@@ -1,4 +1,4 @@
-#include "angles_temp_task.h"
+#include "angles_task.h"
 
 static i2c_master_dev_handle_t i2c_master_dev_handle;
 
@@ -52,22 +52,60 @@ void gyroscope_accelerometer_init()
 void gyroscope_accelerometer_task(void* pvParameters)
 {
     static uint8_t data_reg_addr = 0x3B;
+    static uint8_t g_z_reg_addr = 0x47;
     static uint8_t rx_buf[I2C_MPU6050_DATA_SIZE] = {};
     static MPU6050_data_t MPU6050_data = {};
+
     static float real_x = 0.0f;
     static float real_y = 0.0f;
     static float real_z = 0.0f;
-    static const float alpha = 0.90f;
+
+    static float g_z_error;
+
+    static const float alpha = 0.98f;
     static int64_t integration_time_now;
     static int64_t integration_time_prev = 0;
-    static char angle_time_char[64] = {};
+    static char angle_char_buf[64] = {};
+
+    /* Z (yaw) calibration ( calculate static arror )*/
+
+    int64_t error_z_sum = 0;
+    const int CALIBRATION_SAMPLES = 200;
+
+    for(uint32_t i = 0; i < CALIBRATION_SAMPLES; ++i)
+    {
+        uint8_t g_z_byte[2];
+        xSemaphoreTake(m_I2C1, portMAX_DELAY);
+        // get value from refister GYRO_ZOUT_H to GYRO_ZOUT_L (2 baits)
+        esp_err_t err = i2c_master_transmit_receive(i2c_master_dev_handle, &g_z_reg_addr, sizeof(g_z_reg_addr), g_z_byte, sizeof(g_z_byte), portMAX_DELAY);
+        xSemaphoreGive(m_I2C1);
+
+        if (err != ESP_OK) {
+            ESP_LOGW("I2C", "some MPU-6050 error");
+            // pressed 
+            continue;
+        }
+
+        error_z_sum += (int16_t)((g_z_byte[0] << 8) | g_z_byte[1]);
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
+    g_z_error = ((float)error_z_sum / (float)CALIBRATION_SAMPLES);
+
+    integration_time_prev = esp_timer_get_time();
 
     while(1)
     {
         xSemaphoreTake(m_I2C1, portMAX_DELAY);
-        // get valur from refister ACCEL_XOUT_H to GYRO_ZOUT_L 14 baits
-        ESP_ERROR_CHECK(i2c_master_transmit_receive(i2c_master_dev_handle, &data_reg_addr, sizeof(data_reg_addr), rx_buf, sizeof(rx_buf), portMAX_DELAY));
+        // get value from refister ACCEL_XOUT_H to GYRO_ZOUT_L (14 baits)
+        esp_err_t err = i2c_master_transmit_receive(i2c_master_dev_handle, &data_reg_addr, sizeof(data_reg_addr), rx_buf, sizeof(rx_buf), portMAX_DELAY);
         xSemaphoreGive(m_I2C1);
+
+        if (err != ESP_OK) {
+            ESP_LOGW("I2C", "some MPU-6050 error");
+            // pressed 
+            continue;
+        }
 
         // drain baits
         MPU6050_data.accel_x = (int16_t)((rx_buf[0] << 8) | rx_buf[1]);
@@ -83,22 +121,32 @@ void gyroscope_accelerometer_task(void* pvParameters)
         
         float dt = (float)(integration_time_now - integration_time_prev) / 1000000.0f;
 
-        if (integration_time_prev == 0)
-        {         
-            integration_time_prev = esp_timer_get_time();
-            continue;
-        }
-
         integration_time_prev = integration_time_now;
 
         // Normalize data 
         float gx = ((float)MPU6050_data.gyro_x) / 131.0f;
         float gy = ((float)MPU6050_data.gyro_y) / 131.0f;
-        float gz = (float)MPU6050_data.gyro_z / 131.0f;
+        float gz = ((float)(MPU6050_data.gyro_z - g_z_error) / 131.0f);
 
         float ax = (float)MPU6050_data.accel_x / 16384.0f;
         float ay = (float)MPU6050_data.accel_y / 16384.0f;
         float az = (float)MPU6050_data.accel_z / 16384.0f;
+
+        /* filter dynamic gyro error if angle speed less than 0.5 plus or minus */
+        if(fabs(gx) < 0.5f)
+        {
+            gx = 0.0f;
+        }
+
+        if(fabs(gy) < 0.5f)
+        {
+            gy = 0.0f;
+        }
+
+        if(fabs(gz) < 0.5f)
+        {
+            gz = 0.0f;
+        }
 
         /* Calculate real accelerometer value */        
         float accel_angle_roll  = atan2f(ay, az) * RAD_TO_DEG;
@@ -118,8 +166,8 @@ void gyroscope_accelerometer_task(void* pvParameters)
         real_y = alpha * (real_y + gy * dt) + (1.0f - alpha) * accel_angle_pitch;
         real_z = real_z + gz * dt;
  
-        snprintf(angle_time_char, sizeof(angle_time_char), "x:%3.1f y:%3.1f", real_x, real_y);
-        xQueueSend(q_angle_temp, angle_time_char, portMAX_DELAY);
+        snprintf(angle_char_buf, sizeof(angle_char_buf), "x:%3.1f y:%3.1f z:%3.1f", real_x, real_y, real_z);
+        xQueueSend(q_angle, angle_char_buf, pdMS_TO_TICKS(10));
 
         vTaskDelay(1);
     }

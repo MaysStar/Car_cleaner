@@ -6,4 +6,4 @@ FILE(GLOB_RECURSE app_sources ${CMAKE_SOURCE_DIR}/src/*.*)
 idf_component_register( SRCS ${app_sources}
                         INCLUDE_DIRS "../lib/tasks"
                                      "../lib"
-                        REQUIRES nvs_flash esp_wifi esp_event esp_system lwip driver app_update esp_http_client esp_https_ota esp_driver_mcpwm)
+                        REQUIRES nvs_flash esp_wifi esp_event esp_system lwip driver app_update esp_http_client esp_https_ota esp_driver_mcpwm espcoredump)

@@ -3,18 +3,22 @@
 
 #include "esp_err.h"
 #include "esp_log.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/event_groups.h"
 #include "esp_http_client.h"
 #include "esp_ota_ops.h"
 #include "esp_https_ota.h"
 #include "esp_app_desc.h"
-#include "mqtt_client.h"
 #include "esp_sntp.h"
 #include "esp_netif_sntp.h"
+#include "esp_crt_bundle.h"
+
 #include <time.h>
 #include <string.h>
+
+#include "mqtt_client.h"
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/event_groups.h"
 
 #include "config.h"
 #include "common.h"

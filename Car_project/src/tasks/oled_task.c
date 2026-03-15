@@ -216,11 +216,11 @@ void write_distance(void)
     write_string(distance_char, strlen(distance_char), false, true, 0, 0);
 }
 
-void write_cord_temp(void)
+void write_cord(void)
 {
     static char angle_time_char[64] = {};
 
-    xQueueReceive(q_angle_temp, angle_time_char, 0);
+    xQueueReceive(q_angle, angle_time_char, 0);
 
     write_string(angle_time_char, strlen(angle_time_char), false, true, 30, 0);
 }
@@ -315,7 +315,7 @@ void oled_task(void* pvParameters)
 
         write_time();
 
-        write_cord_temp();
+        write_cord();
         
         /* write all data in the buffer */
         xSemaphoreTake(m_I2C0, portMAX_DELAY);

@@ -6,6 +6,25 @@ static char rx_mqtts_buf[256];
 static char topic_buf[128];
 static int32_t servo_angle;
 
+/* Function which return the reason of MCU reset */
+const char* get_reset_reason_string() 
+{
+    esp_reset_reason_t reason = esp_reset_reason();
+    switch (reason) {
+        case ESP_RST_UNKNOWN:   return "Unknown reset";
+        case ESP_RST_POWERON:   return "Power On / Battery connected";
+        case ESP_RST_EXT:       return "External pin reset";
+        case ESP_RST_SW:        return "Software reset (e.g. after OTA)";
+        case ESP_RST_PANIC:     return "CRASH / Software exception / Panic";
+        case ESP_RST_INT_WDT:   return "Interrupt Watchdog reset";
+        case ESP_RST_TASK_WDT:  return "Task Watchdog reset";
+        case ESP_RST_BROWNOUT:  return "Brownout (Voltage drop / Low battery)";
+        case ESP_RST_SDIO:      return "SDIO reset";
+        default:                return "Other reason";
+    }
+}
+
+
 /* Main mqtts function which connect to hiveMQ */
 void mqtts_hiveMQ(void)
 {
@@ -41,13 +60,29 @@ void mqtts_hiveMQ_handler(  void* event_handler_arg,
                     void* event_data)
 {
     esp_mqtt_event_t* esp_mqtt_event = (esp_mqtt_event_t*)event_data;
+
     switch (event_id)
     {
         case MQTT_EVENT_CONNECTED:
-            ESP_LOGI(TAG, "Connected to HiveMQ! Subscribing...");
-            esp_mqtt_client_subscribe(esp_mqtt_event->client, "car/ota", 1);
-            esp_mqtt_client_subscribe(esp_mqtt_event->client, "car/motors", 1);
-            esp_mqtt_client_subscribe(esp_mqtt_event->client, "car/servo", 1);
+            ESP_LOGI(TAG, "Connected to HiveMQ! Subscribing to topics...");
+    
+            // topics array
+            const char* topics_to_subscribe[] = {"car/ota", "car/logs", "car/motors", "car/servo"};
+            int num_topics = sizeof(topics_to_subscribe) / sizeof(topics_to_subscribe[0]);
+
+            for (int i = 0; i < num_topics; i++) {
+                int msg_id = esp_mqtt_client_subscribe(esp_mqtt_event->client, topics_to_subscribe[i], 1);
+                if (msg_id >= 0) {
+                    ESP_LOGI(TAG, "Subscribed to %s, msg_id=%d", topics_to_subscribe[i], msg_id);
+                } else {
+                    ESP_LOGE(TAG, "Failed to subscribe to %s", topics_to_subscribe[i]);
+                }
+            }
+
+            esp_mqtt_client_publish(esp_mqtt_event->client, topics_to_subscribe[1], get_reset_reason_string(), strlen(get_reset_reason_string()), 1, 0);
+
+            break;
+
             break;
         case MQTT_EVENT_DATA:
             ESP_LOGI(TAG, "MQTT DATA");
@@ -64,23 +99,6 @@ void mqtts_hiveMQ_handler(  void* event_handler_arg,
             else if(strcmp(topic_buf, "car/motors") == 0)
             {
                 ESP_LOGI(TAG, "car/motors");
-                if(strcmp(rx_mqtts_buf, "stop") == 0) xEventGroupSetBits(e_tasks, MQTT_GOT_MOTOR_STOP);
-
-                else if(strcmp(rx_mqtts_buf, "in1") == 0) xEventGroupSetBits(e_tasks, MQTT_GOT_MOTOR_IN1_GO);
-
-                else if(strcmp(rx_mqtts_buf, "in2") == 0) xEventGroupSetBits(e_tasks, MQTT_GOT_MOTOR_IN2_GO);
-
-                else if(strcmp(rx_mqtts_buf, "start") == 0) xEventGroupSetBits(e_tasks, MQTT_GOT_MOTOR_START);
-
-                else if(strcmp(rx_mqtts_buf, "back") == 0) xEventGroupSetBits(e_tasks, MQTT_GOT_MOTOR_START);
-
-                else if(strcmp(rx_mqtts_buf, "start1") == 0) xEventGroupSetBits(e_tasks, MQTT_GOT_MOTOR1_START);
-
-                else if(strcmp(rx_mqtts_buf, "start2") == 0) xEventGroupSetBits(e_tasks, MQTT_GOT_MOTOR2_START);
-
-                else if(strcmp(rx_mqtts_buf, "back1") == 0) xEventGroupSetBits(e_tasks, MQTT_GOT_MOTOR1_BACK);
-                
-                else if(strcmp(rx_mqtts_buf, "back2") == 0) xEventGroupSetBits(e_tasks, MQTT_GOT_MOTOR2_BACK);
             }
 
             else if(strcmp(topic_buf, "car/servo") == 0)
