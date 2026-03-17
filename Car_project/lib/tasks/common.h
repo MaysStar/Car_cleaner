@@ -21,6 +21,7 @@ extern QueueHandle_t q_distance_pid;
 extern QueueHandle_t q_servo_angle;
 extern QueueHandle_t q_time;
 extern QueueHandle_t q_angle;
+extern QueueHandle_t q_speed;
 
 extern EventGroupHandle_t e_tasks;
 

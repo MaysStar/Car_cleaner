@@ -20,7 +20,7 @@ static mcpwm_gen_handle_t mcpwm_gen_handle_IN3;
 static mcpwm_gen_handle_t mcpwm_gen_handle_IN4;
 
 /* cm from wall */
-static float setpoint = 25.0f;
+static float setpoint = 10.0f;
 
 /* Initialization and configuration gpio and pwm for motors */
 void dc_motor_init(void)
@@ -107,23 +107,23 @@ void dc_motor_init(void)
     /* Set PWM HIGH and LOW when full and empty */    
     {
         ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(mcpwm_gen_handle_IN1, 
-            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_HIGH),
-            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_LOW),
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_LOW),
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_HIGH),
             MCPWM_GEN_TIMER_EVENT_ACTION_END()));
 
         ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(mcpwm_gen_handle_IN2, 
-            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_HIGH),
-            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_LOW),
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_LOW),
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_HIGH),
             MCPWM_GEN_TIMER_EVENT_ACTION_END()));
 
         ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(mcpwm_gen_handle_IN3, 
-            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_HIGH),
-            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_LOW),
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_LOW),
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_HIGH),
             MCPWM_GEN_TIMER_EVENT_ACTION_END()));
 
         ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(mcpwm_gen_handle_IN4, 
-            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_HIGH),
-            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_LOW),
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_LOW),
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_HIGH),
             MCPWM_GEN_TIMER_EVENT_ACTION_END()));
     }
 
@@ -147,13 +147,26 @@ void dc_motor_init(void)
     ESP_ERROR_CHECK(mcpwm_timer_start_stop(mcpwm_timer_handle, MCPWM_TIMER_START_NO_STOP));
 }
 
-/* Fcution accepts percent from 0 to 255 and retrun period ticks */
+/* Funcution accepts percent from 0 to 255 and retrun period ticks */
 int32_t percent_into_ticks(int32_t percent_in_255)
 {
+    /* if zero we stop car */
+    if (percent_in_255 == 0) 
+    {
+        return 0; 
+    }
+
+    /* if negative change into positive */
     if(percent_in_255 < 0)
     {
         percent_in_255 *= -1;
     }
+
+    /* change diapasone (from 1 to 255) on ( from 200 to 255 ) */
+    percent_in_255 = 190 + (percent_in_255 * (255 - 190) / 255);
+
+    /* if value more than 255 */
+    percent_in_255 = (percent_in_255 > 255) ? 255 : percent_in_255;
 
     return (int32_t)(percent_in_255 * MOTOR_POWERS / 255);
 }
@@ -162,6 +175,7 @@ int32_t percent_into_ticks(int32_t percent_in_255)
 void motors_control(int32_t percent_in_255)
 {
     /* Set compare value */
+    /* One motor slowed than other so we change value */
     ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(mcpwm_cmpr_handle_motor1, percent_into_ticks(percent_in_255)));
     ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(mcpwm_cmpr_handle_motor2, percent_into_ticks(percent_in_255)));
 

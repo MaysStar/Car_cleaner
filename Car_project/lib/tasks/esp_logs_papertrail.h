@@ -17,6 +17,9 @@
 #include "config.h"
 #include "common.h"
 
+#define EARLY_LOG_SIZE     128
+#define EARLY_LOG_BUF_SIZE 64
+
 void esp_logs_papertrail_init(void);
 
 int new_hook_papertrail_function(const char *frm, va_list list);

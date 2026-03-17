@@ -41,6 +41,7 @@ QueueHandle_t q_distance_pid = NULL;
 QueueHandle_t q_servo_angle = NULL;
 QueueHandle_t q_time = NULL;
 QueueHandle_t q_angle = NULL;
+QueueHandle_t q_speed = NULL;
 
 SemaphoreHandle_t m_I2C0;
 SemaphoreHandle_t m_I2C1;
@@ -72,6 +73,9 @@ void app_main()
     q_ota_level = xQueueCreate(5, sizeof(int32_t));
     configASSERT(q_ota_level != NULL);
 
+    q_speed = xQueueCreate(5, sizeof(int32_t));
+    configASSERT(q_speed != NULL);
+
     q_distance = xQueueCreate(10, sizeof(float));
     configASSERT(q_distance != NULL);
 
@@ -100,13 +104,13 @@ void app_main()
     /* event group */
     e_tasks = xEventGroupCreate();
     configASSERT(e_tasks != NULL);
-    
+
     set_version(version);
     dc_motor_init();
     wifi_init();
 
     uart_init();
-    gyroscope_accelerometer_init();
+    //gyroscope_accelerometer_init();
     
     time_sync();
     mqtts_hiveMQ();
@@ -125,8 +129,8 @@ void app_main()
     xTaskCreate(servo_motor_task, "servo_motor_task", 4096, NULL, 4, &servo_motor_task_handle);
     configASSERT(servo_motor_task_handle != NULL);
 
-    xTaskCreate(gyroscope_accelerometer_task, "gyroscope_accelerometer_task", 4096, NULL, 4, &gyroscope_accelerometer_handle);
-    configASSERT(gyroscope_accelerometer_handle != NULL);
+    //xTaskCreate(gyroscope_accelerometer_task, "gyroscope_accelerometer_task", 4096, NULL, 4, &gyroscope_accelerometer_handle);
+    //configASSERT(gyroscope_accelerometer_handle != NULL);
 
     xTaskCreate(uart_task, "uart_task", 4096, NULL, 3, &uart_task_handle);
     configASSERT(uart_task_handle != NULL);
