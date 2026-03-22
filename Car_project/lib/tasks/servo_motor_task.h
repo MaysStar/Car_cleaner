@@ -15,8 +15,8 @@
 
 #define GPIO_SERVO_MOTOR GPIO_NUM_3
 
-#define SERVO_USE_MQTTS_COMMAND 0
-#define SERVO_USE_ORDINARY_MODE 1
+#define SERVO_USE_MQTTS_COMMAND 1
+#define SERVO_USE_ORDINARY_MODE 0
 
 void servo_motor_init(void);
 void set_angle(int32_t angle);

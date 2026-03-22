@@ -52,14 +52,8 @@ void uart_task(void* pvParameters)
             distance_mm = (uint16_t)(rx_buf[0] << 8 | rx_buf[1]);
 
             float distance_cm = (float)(distance_mm) / 10.0f;
-
-            if(distance_cm <= 20.0f)
-            {
-                xEventGroupSetBits(e_tasks, DISTANCE_LESS_THEN_20CM);
-            }
-            else xEventGroupSetBits(e_tasks, DISTANCE_MORE_THEN_20CM);
-
-            xQueueSend(q_distance, &distance_cm, portMAX_DELAY);
+            xQueueSend(q_distance_pid, &distance_cm, 0);
+            xQueueSend(q_distance, &distance_cm, 0);
         }
         else  ESP_LOGE(TAG, "Can't measure distance");
         

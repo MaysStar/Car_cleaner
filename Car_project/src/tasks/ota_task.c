@@ -2,9 +2,6 @@
 
 static const char* TAG = "ota_task";
 
-extern const char* server_cert_home_pem_start;
-extern const char* server_cert_lviv_pem_start;
-
 /* Main task for ota */
 void ota_task(void* pvParameters)
 {
@@ -16,10 +13,12 @@ void ota_task(void* pvParameters)
 
         esp_http_client_config_t esp_http_client_config = 
         {
-            .url = CONFIG_OTA_HTTPS_URL_HOME,
-            .cert_pem = server_cert_lviv_pem_start,
+            .url = CONFIG_OTA_HTTPS_URL_GITHUB,
+            .crt_bundle_attach = esp_crt_bundle_attach,
             .timeout_ms = 10000,
             .keep_alive_enable = true,
+            .buffer_size = 8192,
+            .buffer_size_tx = 8192,
         };
         
         esp_https_ota_handle_t ota_handle = NULL;

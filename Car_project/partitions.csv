@@ -5,3 +5,4 @@ phy_init, data, phy,     ,        0x1000,
 ota_0,    app,  ota_0,   ,        0x700000,
 ota_1,    app,  ota_1,   ,        0x700000,
 storage,  data, spiffs,  ,        0x100000,
+coredump, data, coredump,,        64K

@@ -1,10 +1,31 @@
 #include "motor_control_task.h"
 
-static const char* TAG = "motor_control_task";
+//static const char* TAG = "motor_control_task";
 
-/* GPIO pin initialization */
-void gpio_motor_init(void)
+/* The main motors state */
+Motors_state_t Main_motors_state = MOTORS_FORWARD_BACKWARD;
+
+/* PWM handles */
+static mcpwm_timer_handle_t mcpwm_timer_handle;
+
+static mcpwm_oper_handle_t mcpwm_oper_handle_motor1;
+static mcpwm_oper_handle_t mcpwm_oper_handle_motor2;
+
+static mcpwm_cmpr_handle_t mcpwm_cmpr_handle_motor1;
+static mcpwm_cmpr_handle_t mcpwm_cmpr_handle_motor2;
+
+static mcpwm_gen_handle_t mcpwm_gen_handle_IN1;
+static mcpwm_gen_handle_t mcpwm_gen_handle_IN2;
+static mcpwm_gen_handle_t mcpwm_gen_handle_IN3;
+static mcpwm_gen_handle_t mcpwm_gen_handle_IN4;
+
+/* cm from wall */
+static float setpoint = 10.0f;
+
+/* Initialization and configuration gpio and pwm for motors */
+void dc_motor_init(void)
 {
+    /* GPIO pin initialization */
     gpio_config_t gpio_config_motor = 
     {
         .intr_type = GPIO_INTR_DISABLE,
@@ -15,88 +36,347 @@ void gpio_motor_init(void)
     };
 
     ESP_ERROR_CHECK(gpio_config(&gpio_config_motor));
+
+    /* Configure and create timer */
+    mcpwm_timer_config_t mcpwm_timer_config = 
+    {
+        .group_id = 0,
+        .intr_priority = 1,
+        .clk_src = MCPWM_TIMER_CLK_SRC_DEFAULT,
+        .resolution_hz = 10 * 1000 * 1000, // 10MHz
+        .count_mode = MCPWM_TIMER_COUNT_MODE_UP,
+        .period_ticks = MOTOR_POWERS, // 50kHz
+        .flags.update_period_on_empty = true,
+    };
+
+    ESP_ERROR_CHECK(mcpwm_new_timer(&mcpwm_timer_config, &mcpwm_timer_handle));
+
+    /* Configure and create operator */
+    mcpwm_operator_config_t mcpwm_operator_config = 
+    {
+        .group_id = 0,
+        .intr_priority = 1,
+        .flags.update_gen_action_on_tep = true,
+    };
+
+    ESP_ERROR_CHECK(mcpwm_new_operator(&mcpwm_operator_config, &mcpwm_oper_handle_motor1));
+    ESP_ERROR_CHECK(mcpwm_new_operator(&mcpwm_operator_config, &mcpwm_oper_handle_motor2));
+
+    /* Connect timer to the operators */
+    ESP_ERROR_CHECK(mcpwm_operator_connect_timer(mcpwm_oper_handle_motor1, mcpwm_timer_handle));
+    ESP_ERROR_CHECK(mcpwm_operator_connect_timer(mcpwm_oper_handle_motor2, mcpwm_timer_handle));
+
+    /* Configure and create comparator */
+    mcpwm_comparator_config_t mcpwm_comparator_config = 
+    {
+        .intr_priority = 1,
+        .flags.update_cmp_on_tez = true,
+    };
+
+    ESP_ERROR_CHECK(mcpwm_new_comparator(mcpwm_oper_handle_motor1, &mcpwm_comparator_config, &mcpwm_cmpr_handle_motor1));
+    ESP_ERROR_CHECK(mcpwm_new_comparator(mcpwm_oper_handle_motor2, &mcpwm_comparator_config, &mcpwm_cmpr_handle_motor2));
+
+    /* Configure and create generators for each GPIO MOTOR number */
+    mcpwm_generator_config_t mcpwm_generator_config_IN1 = 
+    {
+        .gen_gpio_num = GPIO_MOTOR_IN1,
+    };
+
+    mcpwm_generator_config_t mcpwm_generator_config_IN2 = 
+    {
+        .gen_gpio_num = GPIO_MOTOR_IN2,
+    };
+
+    mcpwm_generator_config_t mcpwm_generator_config_IN3 = 
+    {
+        .gen_gpio_num = GPIO_MOTOR_IN3,
+    };
+
+    mcpwm_generator_config_t mcpwm_generator_config_IN4 = 
+    {
+        .gen_gpio_num = GPIO_MOTOR_IN4,
+    };
+
+    ESP_ERROR_CHECK(mcpwm_new_generator(mcpwm_oper_handle_motor1, &mcpwm_generator_config_IN1, &mcpwm_gen_handle_IN1));
+    ESP_ERROR_CHECK(mcpwm_new_generator(mcpwm_oper_handle_motor1, &mcpwm_generator_config_IN2, &mcpwm_gen_handle_IN2));
+    ESP_ERROR_CHECK(mcpwm_new_generator(mcpwm_oper_handle_motor2, &mcpwm_generator_config_IN3, &mcpwm_gen_handle_IN3));
+    ESP_ERROR_CHECK(mcpwm_new_generator(mcpwm_oper_handle_motor2, &mcpwm_generator_config_IN4, &mcpwm_gen_handle_IN4));
+
+    /* Set Register Timer Event Callbacks */
+
+    /* Set PWM HIGH and LOW when full and empty */    
+    {
+        ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(mcpwm_gen_handle_IN1, 
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_LOW),
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_HIGH),
+            MCPWM_GEN_TIMER_EVENT_ACTION_END()));
+
+        ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(mcpwm_gen_handle_IN2, 
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_LOW),
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_HIGH),
+            MCPWM_GEN_TIMER_EVENT_ACTION_END()));
+
+        ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(mcpwm_gen_handle_IN3, 
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_LOW),
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_HIGH),
+            MCPWM_GEN_TIMER_EVENT_ACTION_END()));
+
+        ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(mcpwm_gen_handle_IN4, 
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_FULL, MCPWM_GEN_ACTION_LOW),
+            MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_HIGH),
+            MCPWM_GEN_TIMER_EVENT_ACTION_END()));
+    }
+
+    /* Set PWM comparation configuration */
+    {
+        ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_compare_event(mcpwm_gen_handle_IN1, 
+        MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, mcpwm_cmpr_handle_motor1, MCPWM_GEN_ACTION_LOW)));
+
+        ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_compare_event(mcpwm_gen_handle_IN2, 
+        MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, mcpwm_cmpr_handle_motor1, MCPWM_GEN_ACTION_LOW)));
+
+        ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_compare_event(mcpwm_gen_handle_IN3, 
+        MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, mcpwm_cmpr_handle_motor2, MCPWM_GEN_ACTION_LOW)));
+
+        ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_compare_event(mcpwm_gen_handle_IN4, 
+        MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, mcpwm_cmpr_handle_motor2, MCPWM_GEN_ACTION_LOW)));
+    }
+
+    /* Enable and start timer */
+    ESP_ERROR_CHECK(mcpwm_timer_enable(mcpwm_timer_handle));
+    ESP_ERROR_CHECK(mcpwm_timer_start_stop(mcpwm_timer_handle, MCPWM_TIMER_START_NO_STOP));
+}
+
+/* Funcution accepts percent from 0 to 255 and retrun period ticks */
+int32_t percent_into_ticks(int32_t percent_in_255)
+{
+    /* if zero we stop car */
+    if (percent_in_255 == 0) 
+    {
+        return 0; 
+    }
+
+    /* if negative change into positive */
+    if(percent_in_255 < 0)
+    {
+        percent_in_255 *= -1;
+    }
+
+    /* change diapasone (from 1 to 255) on ( from 190 to 235 ) */
+    percent_in_255 = 190 + (percent_in_255 * (255 - 190) / 255);
+
+    /* if value more than 255 */
+    percent_in_255 = (percent_in_255 > 235) ? 235 : percent_in_255;
+
+    return (int32_t)(percent_in_255 * MOTOR_POWERS / 255);
+}
+
+/* Function which accepts percent from -255 to 255 like -(0 - 100%) backward, 0 - 100% forward */
+void motors_control(int32_t percent_in_255)
+{
+    /* Set compare value */
+    /* One motor slowed than other so we change value */
+
+    /* left */
+    ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(mcpwm_cmpr_handle_motor1, percent_into_ticks(percent_in_255)));
+
+    /* right */
+    ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(mcpwm_cmpr_handle_motor2, percent_into_ticks(percent_in_255)));
+
+    switch(Main_motors_state)
+    {
+        case MOTORS_FORWARD_BACKWARD:
+            if(percent_in_255 > 0)
+            {
+                /* All motors forward */
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN1, -1, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN2, 0, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN3, -1, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN4, 0, true));
+            }
+            else if(percent_in_255 < 0)
+            {
+                /* All motors backward */
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN1, 0, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN2, -1, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN3, 0, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN4, -1, true));
+            }
+            else
+            {
+                /* All motors stop */
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN1, 0, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN2, 0, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN3, 0, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN4, 0, true));
+            }
+            break;
+
+        case MOTORS_ROTATE:
+            if(percent_in_255 > 0)
+            {
+                /* Right motor forward left motor backward and turn left */
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN1, 0, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN2, -1, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN3, -1, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN4, 0, true));
+            }
+            else 
+            {
+                /* Left motor forward right motor backward and turn right */
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN1, -1, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN2, 0, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN3, 0, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN4, -1, true));
+            }
+            break;
+
+        default: 
+            break;
+    }   
+}
+
+/* Function to check obstacle or robot stuck */
+bool check_distance(float prev_meas, float curr_meas)
+{
+    static int64_t prev_time = 0;
+    static int64_t curr_time = 0;
+
+    if(((curr_time - prev_time) / 1000000) > 2)
+    {
+        /* if stand in one place more than 2 second */
+        prev_time = esp_timer_get_time();
+        return true;
+    }
+    else if(fabs(prev_meas - curr_meas) > 2.0f)
+    {
+        /* if motors go */
+        prev_time = esp_timer_get_time();
+    }
+
+    curr_time = esp_timer_get_time();
+
+    return false;
+}
+
+/* Initialize pid controler */
+void pid_controler_init(PID_controler_t* PID_controler)
+{
+    PID_controler->Kp = 0.5f;
+    PID_controler->Ki = 0.0f;
+    PID_controler->Kd = 0.005f;
+
+    PID_controler->min_result = -235.0f;
+    PID_controler->max_result = 235.0f;
+
+    PID_controler->prev_error = 0.0f;
+    PID_controler->prev_measurement = 0.0f;
+
+    PID_controler->proportional = 0.0f;
+    PID_controler->integrator = 0.0f;
+    PID_controler->differentiator = 0.0f;
+
+    PID_controler->curr_time = esp_timer_get_time();
+    PID_controler->prev_time = PID_controler->curr_time;
+    PID_controler->tau = 0.0f;
+
+    PID_controler->out = 0.0f;
+}
+
+/* Fuction which control the speed of the motors speed depending on distance to the wall, using Proportional Integration Differentiation 
+    u(t) = Kp * e(t) + Ki * iteg(e(t)dt) + Kd * de(t) / dt
+
+    return value from -255 to 255
+*/
+int32_t pid_controler_update(PID_controler_t* PID_controler, float measurement, float setpoint)
+{
+    /* Calculate error dt and tau */
+    float curr_error = measurement - setpoint;
+
+    PID_controler->curr_time = esp_timer_get_time();
+    int64_t dt_int = PID_controler->curr_time - PID_controler->prev_time;
+    float dt_f = dt_int / 1000000.0f;
+    if (dt_f <= 0.001f) dt_f = 0.001f;
+
+    PID_controler->tau = 10.0f * dt_f;
+
+    /* Proportional */
+    PID_controler->proportional = PID_controler->Kp * curr_error;
+    
+    /* Integrator Trapezoidal Rule */
+    PID_controler->integrator = PID_controler->integrator + 0.5f * PID_controler->Ki * (PID_controler->prev_error + curr_error) * dt_f;
+
+    if(PID_controler->integrator > PID_controler->max_result) PID_controler->integrator = PID_controler->max_result;
+    if(PID_controler->integrator < PID_controler->min_result) PID_controler->integrator = PID_controler->min_result;
+
+    /* Band-Limited Derivative */
+    PID_controler->differentiator =  (2.0f * PID_controler->Kd * (measurement - PID_controler->prev_measurement)
+                                  +  (2.0f * PID_controler->tau - dt_f) * PID_controler->differentiator)
+                                  /  (2.0f * PID_controler->tau + dt_f);
+
+    /* Set prev measurement */
+    PID_controler->prev_error = curr_error;
+    PID_controler->prev_measurement = measurement;
+    PID_controler->prev_time = PID_controler->curr_time;
+
+    /* Calculate output */
+    PID_controler->out = PID_controler->proportional + PID_controler->integrator + PID_controler->differentiator;
+
+    if(PID_controler->out > PID_controler->max_result)
+    {
+        PID_controler->out = PID_controler->max_result;
+    }
+    else if(PID_controler->out < PID_controler->min_result)
+    {
+        PID_controler->out = PID_controler->min_result;
+    }
+
+    return (int32_t)PID_controler->out;
 }
 
 /* Main task for control motors */
 void motor_task(void* pvParameters)
 {
-    EventBits_t bits;
+    static float distance_cm = 0.0f;
+
+    static PID_controler_t PID_controler;
+    pid_controler_init(&PID_controler);
+
+    const TickType_t xFrequency = pdMS_TO_TICKS(20);
+
     while(1)
     {
-        bits = xEventGroupWaitBits(e_tasks, MQTT_GOT_MOTOR_START | 
-                                            MQTT_GOT_MOTOR_STOP | 
-                                            MQTT_GOT_MOTOR1_START | 
-                                            MQTT_GOT_MOTOR2_START | 
-                                            MQTT_GOT_MOTOR1_BACK | 
-                                            MQTT_GOT_MOTOR2_BACK |
-                                            DISTANCE_LESS_THEN_20CM |
-                                            DISTANCE_MORE_THEN_20CM, pdTRUE, pdFALSE, portMAX_DELAY);
-        if(bits & DISTANCE_LESS_THEN_20CM)
+        xQueueReceive(q_distance_pid, &distance_cm, 0);
+
+        switch(Main_motors_state)
         {
-            gpio_set_level(GPIO_MOTOR_IN1, 0);
-            gpio_set_level(GPIO_MOTOR_IN2, 0);
-            gpio_set_level(GPIO_MOTOR_IN3, 0);
-            gpio_set_level(GPIO_MOTOR_IN4, 0);
-            ESP_LOGI(TAG, "All Motors Stop");
-            continue;
-        }
-        else if(bits & DISTANCE_MORE_THEN_20CM)
-        {
-            gpio_set_level(GPIO_MOTOR_IN1, 1); gpio_set_level(GPIO_MOTOR_IN2, 0);
-            gpio_set_level(GPIO_MOTOR_IN4, 1); gpio_set_level(GPIO_MOTOR_IN3, 0);\
-            ESP_LOGI(TAG, "All Motors Forward");
+            case MOTORS_FORWARD_BACKWARD:
+                if(check_distance(PID_controler.prev_measurement, distance_cm))
+                {
+                    Main_motors_state = MOTORS_ROTATE;
+                }
+
+                int32_t speed = pid_controler_update(&PID_controler, distance_cm, setpoint);
+
+                motors_control(speed);
+
+                //ESP_LOGI(TAG, "motors go with speed: %d", speed);
+            break;
+            case
+             MOTORS_ROTATE:
+                motors_control(80);
+                vTaskDelay(pdMS_TO_TICKS(800));
+
+                /* Call function to set curr time and begin from scratch */
+                check_distance(1.0f, 1.5f);
+                //ESP_LOGI(TAG, "motors rotate");
+                Main_motors_state = MOTORS_FORWARD_BACKWARD;
+            break;
+
+            default:
+                break;
         }
 
-        if(bits & MQTT_GOT_MOTOR_STOP)
-        {
-            gpio_set_level(GPIO_MOTOR_IN1, 0);
-            gpio_set_level(GPIO_MOTOR_IN2, 0);
-            gpio_set_level(GPIO_MOTOR_IN3, 0);
-            gpio_set_level(GPIO_MOTOR_IN4, 0);
-            ESP_LOGI(TAG, "All Motors Stop");
-            continue;
-        }
-
-        if(bits & MQTT_GOT_MOTOR_START)
-        {
-            gpio_set_level(GPIO_MOTOR_IN1, 1); gpio_set_level(GPIO_MOTOR_IN2, 0);
-            gpio_set_level(GPIO_MOTOR_IN4, 1); gpio_set_level(GPIO_MOTOR_IN3, 0);
-            ESP_LOGI(TAG, "All Motors Forward");
-        }
-
-        else if(bits & MQTT_GOT_MOTOR_BACK)
-        {
-            gpio_set_level(GPIO_MOTOR_IN1, 0); gpio_set_level(GPIO_MOTOR_IN2, 1);
-            gpio_set_level(GPIO_MOTOR_IN4, 0); gpio_set_level(GPIO_MOTOR_IN3, 1);
-            ESP_LOGI(TAG, "All Motors Forward");
-        }
-
-        // (IN1, IN2)
-        if(bits & MQTT_GOT_MOTOR1_START) 
-        {
-            gpio_set_level(GPIO_MOTOR_IN1, 1);
-            gpio_set_level(GPIO_MOTOR_IN2, 0);
-            ESP_LOGI(TAG, "Motor 1 Forward");
-        } 
-        else if(bits & MQTT_GOT_MOTOR1_BACK) 
-        {
-            gpio_set_level(GPIO_MOTOR_IN1, 0);
-            gpio_set_level(GPIO_MOTOR_IN2, 1);
-            ESP_LOGI(TAG, "Motor 1 Backward");
-        }
-
-        // (IN3, IN4)
-        if(bits & MQTT_GOT_MOTOR2_START) 
-        {
-            gpio_set_level(GPIO_MOTOR_IN3, 0);
-            gpio_set_level(GPIO_MOTOR_IN4, 1);
-            ESP_LOGI(TAG, "Motor 2 Forward");
-        } 
-        else if(bits & MQTT_GOT_MOTOR2_BACK) 
-        {
-            gpio_set_level(GPIO_MOTOR_IN3, 1);
-            gpio_set_level(GPIO_MOTOR_IN4, 0);
-            ESP_LOGI(TAG, "Motor 2 Backward");
-        }
+        vTaskDelay(xFrequency);
     }
 }

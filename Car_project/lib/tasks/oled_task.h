@@ -60,7 +60,7 @@ extern QueueHandle_t q_distance;
 void set_version(const char* version);
 void oled_init(void);
 void write_distance(void);
-void write_cord_temp(void);
+void write_cord(void);
 void write_ota_update(void);
 void write_time(void);
 
