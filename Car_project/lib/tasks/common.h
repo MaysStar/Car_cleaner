@@ -6,6 +6,7 @@
 #include "freertos/queue.h"
 #include "driver/gptimer.h"
 #include <time.h>
+#include "esp_log.h"
 
 #define WIFI_BIT_GOT_IP         BIT0
 #define MQTT_GOT_UPDATE         BIT1
@@ -22,6 +23,7 @@ extern QueueHandle_t q_servo_angle;
 extern QueueHandle_t q_time;
 extern QueueHandle_t q_angle;
 extern QueueHandle_t q_speed;
+extern QueueHandle_t q_logs;
 
 extern EventGroupHandle_t e_tasks;
 
@@ -32,5 +34,7 @@ extern SemaphoreHandle_t m_I2C1;
 extern SemaphoreHandle_t m_UART1;
 
 extern portMUX_TYPE m_TIME;
+
+extern volatile vprintf_like_t old_logs_uart_output;
 
 #endif // COMMON_H

@@ -42,6 +42,7 @@ QueueHandle_t q_servo_angle = NULL;
 QueueHandle_t q_time = NULL;
 QueueHandle_t q_angle = NULL;
 QueueHandle_t q_speed = NULL;
+QueueHandle_t q_logs = NULL;
 
 SemaphoreHandle_t m_I2C0;
 SemaphoreHandle_t m_I2C1;
@@ -56,6 +57,9 @@ volatile time_t now = 0; // time struct
 
 void app_main() 
 {
+    /* Set new hook function for logs*/
+    old_logs_uart_output = esp_log_set_vprintf(new_hook_papertrail_function);
+
     /* initialization */
     esp_err_t ret = nvs_flash_init();
 
@@ -70,6 +74,9 @@ void app_main()
 
     /* First create all groups and queues */
     /* queue */
+    q_logs = xQueueCreate(10, sizeof(char) * 256);
+    configASSERT(q_logs != NULL);
+
     q_ota_level = xQueueCreate(5, sizeof(int32_t));
     configASSERT(q_ota_level != NULL);
 
@@ -110,7 +117,7 @@ void app_main()
     wifi_init();
 
     uart_init();
-    //gyroscope_accelerometer_init();
+    gyroscope_accelerometer_init();
     
     time_sync();
     mqtts_hiveMQ();
@@ -129,8 +136,8 @@ void app_main()
     xTaskCreate(servo_motor_task, "servo_motor_task", 4096, NULL, 4, &servo_motor_task_handle);
     configASSERT(servo_motor_task_handle != NULL);
 
-    //xTaskCreate(gyroscope_accelerometer_task, "gyroscope_accelerometer_task", 4096, NULL, 4, &gyroscope_accelerometer_handle);
-    //configASSERT(gyroscope_accelerometer_handle != NULL);
+    xTaskCreate(gyroscope_accelerometer_task, "gyroscope_accelerometer_task", 4096, NULL, 4, &gyroscope_accelerometer_handle);
+    configASSERT(gyroscope_accelerometer_handle != NULL);
 
     xTaskCreate(uart_task, "uart_task", 4096, NULL, 3, &uart_task_handle);
     configASSERT(uart_task_handle != NULL);

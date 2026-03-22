@@ -162,11 +162,11 @@ int32_t percent_into_ticks(int32_t percent_in_255)
         percent_in_255 *= -1;
     }
 
-    /* change diapasone (from 1 to 255) on ( from 200 to 255 ) */
+    /* change diapasone (from 1 to 255) on ( from 190 to 235 ) */
     percent_in_255 = 190 + (percent_in_255 * (255 - 190) / 255);
 
     /* if value more than 255 */
-    percent_in_255 = (percent_in_255 > 255) ? 255 : percent_in_255;
+    percent_in_255 = (percent_in_255 > 235) ? 235 : percent_in_255;
 
     return (int32_t)(percent_in_255 * MOTOR_POWERS / 255);
 }
@@ -176,33 +176,87 @@ void motors_control(int32_t percent_in_255)
 {
     /* Set compare value */
     /* One motor slowed than other so we change value */
+
+    /* left */
     ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(mcpwm_cmpr_handle_motor1, percent_into_ticks(percent_in_255)));
+
+    /* right */
     ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(mcpwm_cmpr_handle_motor2, percent_into_ticks(percent_in_255)));
 
-    if(percent_in_255 > 0)
+    switch(Main_motors_state)
     {
-        /* All motors forward */
-        ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN1, -1, true));
-        ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN2, 0, true));
-        ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN4, -1, true));
-        ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN3, 0, true));
-    }
-    else if(percent_in_255 < 0)
+        case MOTORS_FORWARD_BACKWARD:
+            if(percent_in_255 > 0)
+            {
+                /* All motors forward */
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN1, -1, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN2, 0, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN3, -1, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN4, 0, true));
+            }
+            else if(percent_in_255 < 0)
+            {
+                /* All motors backward */
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN1, 0, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN2, -1, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN3, 0, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN4, -1, true));
+            }
+            else
+            {
+                /* All motors stop */
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN1, 0, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN2, 0, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN3, 0, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN4, 0, true));
+            }
+            break;
+
+        case MOTORS_ROTATE:
+            if(percent_in_255 > 0)
+            {
+                /* Right motor forward left motor backward and turn left */
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN1, 0, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN2, -1, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN3, -1, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN4, 0, true));
+            }
+            else 
+            {
+                /* Left motor forward right motor backward and turn right */
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN1, -1, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN2, 0, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN3, 0, true));
+                ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN4, -1, true));
+            }
+            break;
+
+        default: 
+            break;
+    }   
+}
+
+/* Function to check obstacle or robot stuck */
+bool check_distance(float prev_meas, float curr_meas)
+{
+    static int64_t prev_time = 0;
+    static int64_t curr_time = 0;
+
+    if(((curr_time - prev_time) / 1000000) > 2)
     {
-        /* All motors backward */
-        ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN1, 0, true));
-        ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN2, -1, true));
-        ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN4, 0, true));
-        ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN3, -1, true));
+        /* if stand in one place more than 2 second */
+        prev_time = esp_timer_get_time();
+        return true;
     }
-    else
+    else if(fabs(prev_meas - curr_meas) > 2.0f)
     {
-        /* All motors stop */
-        ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN1, 0, true));
-        ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN2, 0, true));
-        ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN4, 0, true));
-        ESP_ERROR_CHECK(mcpwm_generator_set_force_level(mcpwm_gen_handle_IN3, 0, true));
+        /* if motors go */
+        prev_time = esp_timer_get_time();
     }
+
+    curr_time = esp_timer_get_time();
+
+    return false;
 }
 
 /* Initialize pid controler */
@@ -212,8 +266,8 @@ void pid_controler_init(PID_controler_t* PID_controler)
     PID_controler->Ki = 0.0f;
     PID_controler->Kd = 0.005f;
 
-    PID_controler->min_result = -255.0f;
-    PID_controler->max_result = 255.0f;
+    PID_controler->min_result = -235.0f;
+    PID_controler->max_result = 235.0f;
 
     PID_controler->prev_error = 0.0f;
     PID_controler->prev_measurement = 0.0f;
@@ -242,6 +296,7 @@ int32_t pid_controler_update(PID_controler_t* PID_controler, float measurement, 
     PID_controler->curr_time = esp_timer_get_time();
     int64_t dt_int = PID_controler->curr_time - PID_controler->prev_time;
     float dt_f = dt_int / 1000000.0f;
+    if (dt_f <= 0.001f) dt_f = 0.001f;
 
     PID_controler->tau = 10.0f * dt_f;
 
@@ -283,8 +338,11 @@ int32_t pid_controler_update(PID_controler_t* PID_controler, float measurement, 
 void motor_task(void* pvParameters)
 {
     static float distance_cm = 0.0f;
+
     static PID_controler_t PID_controler;
     pid_controler_init(&PID_controler);
+
+    const TickType_t xFrequency = pdMS_TO_TICKS(20);
 
     while(1)
     {
@@ -293,18 +351,32 @@ void motor_task(void* pvParameters)
         switch(Main_motors_state)
         {
             case MOTORS_FORWARD_BACKWARD:
+                if(check_distance(PID_controler.prev_measurement, distance_cm))
+                {
+                    Main_motors_state = MOTORS_ROTATE;
+                }
+
                 int32_t speed = pid_controler_update(&PID_controler, distance_cm, setpoint);
+
                 motors_control(speed);
+
                 //ESP_LOGI(TAG, "motors go with speed: %d", speed);
             break;
-            case MOTORS_ROTATE:
+            case
+             MOTORS_ROTATE:
+                motors_control(80);
+                vTaskDelay(pdMS_TO_TICKS(800));
 
+                /* Call function to set curr time and begin from scratch */
+                check_distance(1.0f, 1.5f);
+                //ESP_LOGI(TAG, "motors rotate");
+                Main_motors_state = MOTORS_FORWARD_BACKWARD;
             break;
 
             default:
                 break;
         }
 
-        vTaskDelay(1);
+        vTaskDelay(xFrequency);
     }
 }

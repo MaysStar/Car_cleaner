@@ -5,6 +5,7 @@ static const char* TAG = "mqtts_haveMQ";
 static char rx_mqtts_buf[256];
 static char topic_buf[128];
 static int32_t servo_angle;
+static int32_t speed;
 
 /* Function which return the reason of MCU reset */
 const char* get_reset_reason_string() 
@@ -99,6 +100,13 @@ void mqtts_hiveMQ_handler(  void* event_handler_arg,
             else if(strcmp(topic_buf, "car/motors") == 0)
             {
                 ESP_LOGI(TAG, "car/motors");
+
+                speed = atoi(rx_mqtts_buf);
+
+                if(speed > 255) speed = 255;
+                else if (speed < -255) speed = -255;
+
+                xQueueSend(q_speed, &speed, 0);
             }
 
             else if(strcmp(topic_buf, "car/servo") == 0)

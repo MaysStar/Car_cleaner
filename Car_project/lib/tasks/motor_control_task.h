@@ -8,6 +8,7 @@
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
 #include <string.h>
+#include <math.h>
 
 #include "driver/mcpwm_prelude.h"
 #include "esp_timer.h"
@@ -62,6 +63,7 @@ void dc_motor_init(void);
 int32_t percent_into_ticks(int32_t percent_in_255);
 void motors_control(int32_t percent_in_255);
 
+bool check_distance(float prev_meas, float curr_meas);
 void pid_controler_init(PID_controler_t* PID_controler);
 int32_t pid_controler_update(PID_controler_t* PID_controler, float distance_cm, float setpoint);
 

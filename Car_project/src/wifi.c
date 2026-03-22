@@ -20,8 +20,8 @@ void wifi_init(void)
 
     wifi_config_t wifi_config = 
     {
-        .sta.ssid = CONFIG_WIFI_SSID_LVIV,
-        .sta.password = CONFIG_WIFI_PASSWORD_LVIV,
+        .sta.ssid = CONFIG_WIFI_SSID_HOME,
+        .sta.password = CONFIG_WIFI_PASSWORD_HOME,
         .sta.threshold.authmode = WIFI_AUTH_WPA2_PSK,
     };
 
